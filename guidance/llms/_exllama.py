@@ -110,30 +110,40 @@ class Model:
         )
 
         scores = [] if return_dict_in_generate and output_scores else None
-        # tokens = inputs.flatten().tolist()
-        # n_past = len(self._past)
-        # if n_past > 0 and tokens[:n_past] == self._past:
-        #     tokens = tokens[n_past:]
+        
+        n_past = self._past.size(dim=1) if self._past is not None else 0
+        if n_past > 0 and torch.equal(self._past, inputs[:, :n_past]):
+            llm.gen_feed_tokens(inputs[:, n_past:])
+        else:
+            meta_cache_key = llm.tokenizer.decode(inputs[0, :100])
+            if meta_cache_key in self._meta_cache:
+                meta_seq, meta_cache = self._meta_cache[meta_cache_key]
+                llm.sequence = meta_seq.clone()
+                llm.sequence_actual = meta_seq.clone()
+                llm.cache = meta_cache
+                # llm.cache = meta_cache.clone()
+                # llm.cache.current_seq_len = meta_cache.current_seq_len
+                llm.gen_begin_reuse(inputs)
+            else:
+                llm.gen_begin(inputs)
+                meta_seq = llm.sequence.clone()
+                meta_cache = llm.cache.clone()
+                # meta_cache = llm.cache.clone()
+                # meta_cache.current_seq_len = llm.cache.current_seq_len
+                self._meta_cache[meta_cache_key] = (meta_seq, meta_cache)
+
+        # n_past = self._past.size(dim=1) if self._past is not None else 0
+        # if n_past > 0 and torch.equal(self._past, inputs[:, :n_past]):
         #     reset = False
+        #     llm.gen_feed_tokens(inputs[:, n_past:])
 
         # if reset:
         #     llm.reset()
-
-        # if tokens:
-        #     llm.eval(tokens)
-
-        n_past = self._past.size(dim=1) if self._past is not None else 0
-        if n_past > 0 and torch.equal(self._past, inputs[:, :n_past]):
-            reset = False
-            llm.gen_feed_tokens(inputs[:, n_past:])
-
-        if reset:
-            llm.reset()
-            llm.end_beam_search()
-            llm.sequence = inputs.clone()
-            llm.sequence_actual = inputs.clone()
-            llm.cache.current_seq_len = 0
-            llm.model.forward(llm.sequence[:, :-1], llm.cache, preprocess_only = True, lora = llm.lora)
+        #     llm.end_beam_search()
+        #     llm.sequence = inputs.clone()
+        #     llm.sequence_actual = inputs.clone()
+        #     llm.cache.current_seq_len = 0
+        #     llm.model.forward(llm.sequence[:, :-1], llm.cache, preprocess_only = True, lora = llm.lora)
 
         max_new_tokens = min(generation_config.max_new_tokens, llm.model.config.max_seq_len - inputs.shape[1])
 
