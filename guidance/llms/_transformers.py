@@ -6,6 +6,7 @@ import pygtrie
 import queue
 import threading
 import collections.abc
+import functools
 from ._llm import LLM, LLMSession, SyncSession
 
 
@@ -47,6 +48,7 @@ class Transformers(LLM):
     def new_string_builder(self, starting_ids=None):
         return TransformersStringBuilder(self.tokenizer, starting_ids)
 
+    @functools.lru_cache(maxsize=1000000)
     def prefix_matches(self, prefix):
         """ Return the list of tokens that match the given prefix.
         """
